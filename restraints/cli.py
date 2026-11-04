@@ -32,6 +32,46 @@ def add_metal_pair_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_readyset_arguments(parser: argparse.ArgumentParser) -> None:
+    """Options shared by narestraints and narestraints-guesser."""
+    group = parser.add_argument_group(
+        "phenix.ready_set preparation",
+        "Models with heavy atoms (HETATM, atomic number 21/Sc and above) are first run "
+        "through phenix.ready_set with hydrogens=False and ligands=True, and the updated "
+        "model it writes is used instead.",
+    )
+    group.add_argument(
+        "--readyset", choices=("auto", "always", "never"), default="auto",
+        help="auto: only when the model has heavy atoms (default); always; or never",
+    )
+    group.add_argument(
+        "--ready-set", metavar="PATH", default=None,
+        help="phenix.ready_set executable or Phenix installation folder "
+             "(default: found automatically)",
+    )
+    group.add_argument(
+        "--readyset-dir", metavar="DIR", default=None,
+        help="folder for ReadySet files (default: <model name>_readyset next to the model)",
+    )
+
+
+def prepared_model_from_args(parser: argparse.ArgumentParser, args):
+    """Run ReadySet if needed; return the model path to use from now on."""
+    from .readyset import ReadySetError, prepare_model, report
+
+    try:
+        result = prepare_model(
+            args.pdb,
+            mode=args.readyset,
+            executable=args.ready_set,
+            directory=args.readyset_dir,
+        )
+    except ReadySetError as exc:
+        parser.exit(2, f"ERROR: {exc}\n")
+    report(result)
+    return result.model
+
+
 def metal_elements_from_args(parser: argparse.ArgumentParser, args):
     if args.metal_distance <= 0:
         parser.error("--metal-distance must be positive")
@@ -81,6 +121,7 @@ def main() -> None:
     )
 
     add_metal_pair_arguments(parser)
+    add_readyset_arguments(parser)
     parser.add_argument(
         "--keep-metal-pair-stacking", action="store_true",
         help="keep stacking restraints for bases in metal-mediated pairs "
@@ -103,8 +144,9 @@ def main() -> None:
     if output is None:
         output = args.pdb.rsplit(".", 1)[0] + ".phil"
 
-    pdb = validate_and_fix_pdb(args.pdb)
-    stretches = read_base_pair_file(args.pairs)
+    stretches = read_base_pair_file(args.pairs)  # fail fast, before ReadySet runs
+    model = prepared_model_from_args(parser, args)
+    pdb = validate_and_fix_pdb(model)
 
     build_phil_from_pdb(
         pdb,

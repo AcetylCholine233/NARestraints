@@ -865,9 +865,15 @@ def main() -> None:
         action="store_true",
         help="Explicitly allow non-canonical pair recipes (AG IX and GU XXVIII)",
     )
-    from .cli import add_metal_pair_arguments, metal_elements_from_args
+    from .cli import (
+        add_metal_pair_arguments,
+        add_readyset_arguments,
+        metal_elements_from_args,
+        prepared_model_from_args,
+    )
 
     add_metal_pair_arguments(parser)
+    add_readyset_arguments(parser)
 
     args = parser.parse_args()
     metal_elements = metal_elements_from_args(parser, args)
@@ -880,7 +886,8 @@ def main() -> None:
         )
     )
 
-    fixed_pdb = validate_and_fix_pdb(args.pdb)
+    model = prepared_model_from_args(parser, args)
+    fixed_pdb = validate_and_fix_pdb(model)
     candidates, messages, metal_pairs = guess_pairs_detailed(
         fixed_pdb,
         allow_noncanonical=args.non_canonical,

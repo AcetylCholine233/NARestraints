@@ -59,6 +59,38 @@ B 125:119
 
 Blank lines separate stretches; ranges may run forward or backward.
 
+## Preparing models with phenix.ready_set
+
+**Status: unreleased feature branch.** Neither NARestraints nor phenix.refine
+can handle ligands without restraint definitions. When a model has heavy atoms
+in `HETATM` records (atomic number 21/Sc and above), `narestraints` and
+`narestraints-guesser` first run `phenix.ready_set` on it and continue with
+the updated model it writes:
+
+```text
+phenix.ready_set MODEL.pdb ready_set.actions.hydrogens=False \
+  ready_set.actions.ligands=True ready_set.actions.optimise_ligand_geometry=False
+```
+
+Hydrogens are never added (Phenix's default is to add them) and ligand
+restraints are always generated. ReadySet runs on a copy of the model in its
+own folder, `<model name>_readyset/` next to the model (`--readyset-dir` to
+change), which also keeps the log, `MODEL.updated.pdb` and, when ligands need
+them, `MODEL.ligands.cif`. Refine the updated model with the generated `.phil`
+and give phenix.refine the `.ligands.cif` too.
+
+Safeguards: a ReadySet result containing new hydrogens is refused; a changed
+atom count is reported; a failed run stops with the end of its log. When
+ReadySet reports that there are no unknown residues and writes no updated
+model, the input model is used unchanged.
+
+Options: `--readyset auto|always|never` (default `auto`), `--ready-set PATH`
+(the `phenix.ready_set` program or the Phenix folder). Without `--ready-set`,
+the program is looked for via `NARESTRAINTS_READY_SET`, `PATH`, `$PHENIX`, then
+`~/phenix-*`, `/Applications/phenix-*`, `/usr/local/phenix-*` and
+`/opt/phenix-*`, newest version first. The option names were checked against
+the Phenix 2.2.1 ReadySet parameter definitions; tests use a stand-in ReadySet.
+
 ## Anomalous scatterers (`--anomalous`)
 
 **Status: unreleased feature branch.** Add `--anomalous` to also write the

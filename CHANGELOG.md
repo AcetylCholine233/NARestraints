@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Run phenix.ready_set before `narestraints` and `narestraints-guesser` when the
+  model has HETATM heavy atoms (`restraints/readyset.py`), always with
+  `hydrogens=False`, `ligands=True` and `optimise_ligand_geometry=False`, in a
+  separate `<model>_readyset/` folder, and continue with its updated model.
+  Added hydrogens are refused; ReadySet no-ops fall back to the input model.
+  Options `--readyset auto|always|never`, `--ready-set PATH`, `--readyset-dir`.
 - Detect metal-mediated base pairs from coordinates (`restraints/metal_pairs.py`):
   a HETATM metal (Z >= 21 by default) within 3.6 A of base N/O/S/Se atoms of
   two non-neighbouring nucleotides. `narestraints` skips pair restraints and,
