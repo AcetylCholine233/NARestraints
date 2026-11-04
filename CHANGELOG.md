@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Add an opt-in `--anomalous` / `--anomalous-elements` toggle to `narestraints`
+  that finds heavy atoms in HETATM records (atomic number >= 21 by default,
+  waters excluded) and writes one phenix.refine
+  `refinement.refine.anomalous_scatterers` group per element, with f'/f''
+  starting at 0 and refined, plus the default strategy with `group_anomalous`
+  (suppress with `--no-anomalous-strategy`). New pure-Python module
+  `restraints/anomalous.py` and `tests/test_anomalous.py`. Output without the
+  toggle is unchanged. PHIL checked against Phenix 2.2.1 parameter definitions;
+  no native phenix.refine run recorded yet.
 - Correct swapped 5BU/BRU sugar types and abbreviations, including the sorting
   view; align reviewed DF O2 mapping with atom S1, and trim all 129 literal
   `C5 ` role mappings. Document the exact 138 changed cells, source evidence

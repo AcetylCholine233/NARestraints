@@ -485,12 +485,18 @@ def write_phil(
     filename: str | Path,
     pair_blocks: Sequence[str],
     stacking_block: str = "",
+    anomalous_block: str = "",
 ) -> None:
     """Write Phenix PHIL with custom geometry edits at the correct scope.
 
     IMPORTANT:
       refinement.geometry_restraints.edits is a sibling of
       refinement.pdb_interpretation, not a child of pdb_interpretation.
+
+    ``anomalous_block`` is an optional ``refine { ... }`` scope (see
+    ``restraints.anomalous.anomalous_phil_block``). It is written inside
+    ``refinement`` after the geometry edits; when empty, the output is
+    unchanged from earlier versions.
     """
     path = Path(filename)
 
@@ -516,9 +522,11 @@ def write_phil(
     if pair_blocks:
         chunks.append("\n\n".join(pair_blocks))
 
-    chunks.extend([
-        "  }",
-        "}",
-    ])
+    chunks.append("  }")
+
+    if anomalous_block:
+        chunks.extend(["", anomalous_block])
+
+    chunks.append("}")
 
     path.write_text("\n".join(chunks) + "\n")

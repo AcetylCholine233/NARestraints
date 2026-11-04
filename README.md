@@ -59,6 +59,72 @@ B 125:119
 
 Blank lines separate stretches; ranges may run forward or backward.
 
+## Anomalous scatterers (`--anomalous`)
+
+**Status: unreleased feature branch.** Add `--anomalous` to also write the
+model's heavy atoms as phenix.refine anomalous-scatterer groups, so their f'
+and f'' are refined against anomalous data:
+
+```bash
+narestraints input.pdb pairs.txt -o restraints.phil --anomalous
+narestraints input.pdb pairs.txt -o restraints.phil --anomalous-elements AG
+```
+
+**Inputs and selection.** Only `HETATM` records of the first model are read;
+waters (`HOH`, `WAT`, `DOD` and similar) are skipped. By default an atom is a
+heavy atom when its element has atomic number 21 (Sc) or more: this covers
+transition metals such as Ag, Hg, Au, Cu, Zn, Ni, Pd and Pt, and Se, Br and I,
+including those inside modified nucleotides written as `HETATM`. Na, Mg, K, Ca
+and ligand C/N/O/P/S/Cl are not included by default; name them with
+`--anomalous-elements` (for example `--anomalous-elements AG,MG`), which
+replaces the cutoff with an explicit list.
+
+**Element identity.** The element column (PDB columns 77-78) is used when
+present. If it is blank, the element is inferred from an ion residue whose
+residue and atom names are the same element symbol (`AG`/`AG`), then from the
+PDB atom-name alignment convention, then from the atom name's leading letters.
+Inferred elements are reported in the terminal; undeterminable ones are
+skipped with a warning.
+
+**Output.** One group per element, inside `refinement.refine`:
+
+```text
+  refine {
+    strategy = *individual_sites *individual_sites_real_space *individual_adp *occupancies *group_anomalous
+    anomalous_scatterers {
+      group {
+        selection = "(chain Z and resid 6 and name AG) or (chain Z and resid 7 and name AG)"
+        f_prime = 0
+        f_double_prime = 0
+        refine = *f_prime *f_double_prime
+      }
+    }
+  }
+```
+
+f' and f'' start at 0 (Phenix's defaults) and are both refined. Alternate
+locations of one atom share one selection. `group_anomalous` is not part of
+Phenix's default strategy, so the file sets the default strategy plus
+`group_anomalous`. Because a PHIL strategy line replaces the whole strategy,
+use `--no-anomalous-strategy` when the strategy is set elsewhere (another
+PHIL file, the command line, or NASolve) and add `group_anomalous` there.
+Without `--anomalous`, the output is byte-for-byte unchanged.
+
+**Evidence.** Pure-Python tests cover element detection, inference, cutoffs,
+alternate locations, insertion codes, blank chains, multi-model files and the
+bundled `dfPucker.pdb` (Ag), `2j02.pdb` (Zn, Mg) and `1BNA.pdb` (water only)
+examples. The generated scope was checked against the Phenix 2.2.1
+`phenix/refinement/__init__.params` definitions with Phenix's own PHIL parser:
+every parameter was recognised, and a misspelled scope was rejected. A native
+`phenix.refine` run has not yet been recorded.
+
+**Limitations.** Refining f'' requires anomalous observations (F+/F- or
+I+/I-) to be supplied to phenix.refine. Phenix does not allow anomalous group
+refinement with experimental phases under the MLHL target. Starting values are
+not calculated from the wavelength. `ATOM` records are never scanned. Only the
+restraint generator gains this option; the guesser and mirror tools are
+unchanged.
+
 ## Reviewed recipe library
 
 Pair identity and restraint geometry are separate. Pair lookup is order-independent;

@@ -5,6 +5,13 @@ from typing import Iterable
 
 from Bio.PDB import PDBParser
 
+from .anomalous import (
+    DEFAULT_MIN_ATOMIC_NUMBER,
+    HeavyAtomSite,
+    anomalous_phil_block,
+    describe_sites,
+    find_heavy_atoms,
+)
 from .base_pairs import BasePairStretch
 from .phenix import PairResidue, generate_pair_restraints, write_phil
 from .residue_library import find_residue, load_residue_records
@@ -108,7 +115,19 @@ def build_phil_from_pdb(
     parallels: bool = True,
     planes: bool = True,
     include_stacking: bool = True,
-) -> None:
+    anomalous: bool = False,
+    anomalous_elements: Iterable[str] | None = None,
+    anomalous_strategy: bool = True,
+    anomalous_min_atomic_number: int = DEFAULT_MIN_ATOMIC_NUMBER,
+) -> list[HeavyAtomSite]:
+    """Write the restraint PHIL and return any anomalous scatterers written.
+
+    With ``anomalous=True`` (or an explicit ``anomalous_elements`` list),
+    heavy atoms in HETATM records are written as phenix.refine anomalous
+    scatterer groups; see ``restraints.anomalous``. ``anomalous_strategy``
+    also adds ``group_anomalous`` to the refinement strategy, without which
+    phenix.refine does not refine the groups.
+    """
     parser = PDBParser(QUIET=True)
     structure = parser.get_structure("NARestraints", str(pdb_filename))
     records = load_residue_records()
@@ -168,4 +187,27 @@ def build_phil_from_pdb(
                 for warning in warnings:
                     print(f"WARNING: {warning}")
 
-    write_phil(output_filename, pair_blocks, stacking_block)
+    anomalous_sites: list[HeavyAtomSite] = []
+    anomalous_block = ""
+    if anomalous or anomalous_elements is not None:
+        anomalous_sites, anomalous_warnings = find_heavy_atoms(
+            pdb_filename,
+            elements=anomalous_elements,
+            min_atomic_number=anomalous_min_atomic_number,
+        )
+        for warning in anomalous_warnings:
+            print(f"WARNING: {warning}")
+        if anomalous_sites:
+            for line in describe_sites(anomalous_sites):
+                print(line)
+            anomalous_block = anomalous_phil_block(
+                anomalous_sites, include_strategy=anomalous_strategy
+            )
+        else:
+            print(
+                "WARNING: --anomalous found no heavy atoms in HETATM records; "
+                "no anomalous scatterer groups were written."
+            )
+
+    write_phil(output_filename, pair_blocks, stacking_block, anomalous_block)
+    return anomalous_sites
