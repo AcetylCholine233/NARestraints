@@ -146,8 +146,11 @@ def parse_element_list(text: str | Iterable[str]) -> frozenset[str]:
     return frozenset(symbols)
 
 
-def _infer_element(name_field: str, residue_name: str) -> tuple[str | None, str]:
-    """Infer an element from the 4-character atom-name field (columns 13-16)."""
+def infer_element(name_field: str, residue_name: str) -> tuple[str | None, str]:
+    """Infer an element from the 4-character atom-name field (columns 13-16).
+
+    Returns ``(symbol or None, how it was inferred)``.
+    """
     stripped = name_field.strip()
     letters = "".join(ch for ch in stripped if ch.isalpha()).upper()
 
@@ -228,7 +231,7 @@ def find_heavy_atoms(
             element = element_symbol(line[76:78]) if len(line) > 76 else None
             source = ELEMENT_COLUMN
             if element is None:
-                element, source = _infer_element(name_field, residue_name)
+                element, source = infer_element(name_field, residue_name)
 
             atom_name = name_field.strip()
             chain = line[21:22].strip()

@@ -125,6 +125,53 @@ not calculated from the wavelength. `ATOM` records are never scanned. Only the
 restraint generator gains this option; the guesser and mirror tools are
 unchanged.
 
+## Metal-mediated base pairs and stacking
+
+**Status: unreleased feature branch.** Both `narestraints` and
+`narestraints-guesser` look for metal-mediated base pairs (for example
+C-Ag-C or T-Hg-T) in the model and treat them differently from hydrogen-bonded
+pairs.
+
+**Detection.** A metal ion is a `HETATM` atom of a metal element (default:
+atomic number 21/Sc and above; `--metal-elements AG,HG` to choose) in a
+residue that is not a nucleotide and not water. A nucleotide is any residue
+with a C1' atom. For each ion, NARestraints finds nucleotides with a base
+N, O, S or Se atom (not sugar or phosphate atoms) within `--metal-distance`
+(default 3.6 A) of the ion. Two such nucleotides that are not neighbours on
+one chain form the metal-mediated pair; if several qualify, the pair with the
+shortest summed distances is used and the others are reported. The default
+distance is generous because ions placed in starting models are often too far
+from, or clashing with, the bases they bridge; refined M-N/O distances are
+about 2.0-2.4 A. Contacts under 1.8 A are reported as clashes.
+
+**Restraint generation.** Any pair-file pair that involves a base of a
+metal-mediated pair gets no pair restraints (H-bond distances, angles,
+parallelity or planarity), with a warning if the listed partner differs from
+the detected one. These bases also get no stacking restraints unless
+`--keep-metal-pair-stacking` is given; their neighbours are not stacked across
+the gap.
+
+**Guessing.** Bases of metal-mediated pairs are never candidates, never extend
+a run and never fill a gap. Detected pairs are printed and written to the
+guessed pair file as commented blocks, which `narestraints` ignores.
+
+**Stacking of non-nucleotides.** Independently of the above, stacking is only
+generated between nucleotide-like residues (workbook-mapped, or with a C1'
+atom). Ions, waters and ligands that share a chain with the nucleic acid are
+no longer stacked onto the neighbouring base. This changes output for models
+whose chains contain such residues.
+
+`--no-metal-pairs` turns detection off and restores the previous pair and
+guessing behaviour; the non-nucleotide stacking fix always applies.
+
+**Evidence and limitations.** Pure-Python tests cover detection rules, cutoffs,
+clashes, alternate locations and a brute-force check of the spatial search;
+builder and guesser tests use `examples/dfPucker.pdb`, where Ag bridges A:9
+DF S1 (2.22 A) and D:8 DG N2 (2.55 A), and `examples/1BNA.pdb`. Detection is
+purely geometric: it does not check coordination chemistry, and an ion that
+bridges two bases without forming a designed pair is treated the same way.
+Insertion codes are ignored when matching residues.
+
 ## Reviewed recipe library
 
 Pair identity and restraint geometry are separate. Pair lookup is order-independent;

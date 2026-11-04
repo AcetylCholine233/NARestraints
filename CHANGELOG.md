@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Detect metal-mediated base pairs from coordinates (`restraints/metal_pairs.py`):
+  a HETATM metal (Z >= 21 by default) within 3.6 A of base N/O/S/Se atoms of
+  two non-neighbouring nucleotides. `narestraints` skips pair restraints and,
+  unless `--keep-metal-pair-stacking`, stacking for those bases;
+  `narestraints-guesser` never guesses them and records them as comments in
+  its output. Options `--metal-distance`, `--metal-elements`,
+  `--no-metal-pairs`. New `guess_pairs_detailed()`; `guess_pairs()` keeps its
+  two-value return.
+- Stop generating stacking between nucleotides and following non-nucleotide
+  residues (ions, waters, ligands) in the same chain.
 - Add an opt-in `--anomalous` / `--anomalous-elements` toggle to `narestraints`
   that finds heavy atoms in HETATM records (atomic number >= 21 by default,
   waters excluded) and writes one phenix.refine
