@@ -9,7 +9,7 @@ from typing import Iterable
 import numpy as np
 from Bio.PDB import PDBParser
 
-from .builder import pair_residue_from_pdb
+from .builder import first_model, pair_residue_from_pdb
 from .phenix import (
     AT_ANGLE_RESTRAINTS,
     AT_BONDS,
@@ -23,6 +23,12 @@ from .phenix import (
     DT_BONDS,
     PairResidue,
     atom_name,
+)
+from .metal_pairs import (
+    DEFAULT_MAX_DISTANCE,
+    MetalMediatedPair,
+    find_metal_mediated_pairs,
+    metal_bound_residues,
 )
 from .recipe_library import recipe_for
 from .validator import validate_and_fix_pdb
@@ -410,6 +416,7 @@ def _infer_run_extensions(
     residue_lookup: dict[tuple[str, int], tuple[object, PairResidue]],
     *,
     allow_noncanonical: bool = False,
+    metal_bound: frozenset = frozenset(),
 ):
     """
     Iteratively extend an established antiparallel run toward both ends.
@@ -436,6 +443,13 @@ def _infer_run_extensions(
 
         key1 = (edge.first.chain, a)
         key2 = (edge.second.chain, b)
+
+        if (edge.first.chain, str(a)) in metal_bound or (edge.second.chain, str(b)) in metal_bound:
+            messages.append(
+                f"RUN EDGE: {edge.first.chain}{a} <-> "
+                f"{edge.second.chain}{b}: metal-mediated base; run stops"
+            )
+            return None, True
 
         if key1 not in residue_lookup or key2 not in residue_lookup:
             messages.append(
@@ -529,6 +543,7 @@ def _infer_run_gaps(
     residue_lookup: dict[tuple[str, int], tuple[object, PairResidue]],
     *,
     allow_noncanonical: bool = False,
+    metal_bound: frozenset = frozenset(),
 ):
     """Check one-residue holes inside an otherwise continuous run."""
     additions = []
@@ -554,6 +569,13 @@ def _infer_run_gaps(
 
         key1 = (left.first.chain, a)
         key2 = (left.second.chain, b)
+
+        if (left.first.chain, str(a)) in metal_bound or (left.second.chain, str(b)) in metal_bound:
+            messages.append(
+                f"RUN GAP: {left.first.chain}{a} <-> "
+                f"{left.second.chain}{b}: metal-mediated base; left unpaired"
+            )
+            continue
 
         if key1 not in residue_lookup or key2 not in residue_lookup:
             continue
@@ -610,6 +632,7 @@ def _select_runs(
     residue_lookup: dict[tuple[str, int], tuple[object, PairResidue]],
     *,
     allow_noncanonical: bool = False,
+    metal_bound: frozenset = frozenset(),
 ):
     """Select strong antiparallel runs, then fill gaps and extend edges."""
     # Only reasonably plausible candidates seed runs. We keep the threshold
@@ -628,10 +651,12 @@ def _select_runs(
 
     for run in runs:
         run_additions, run_messages = _infer_run_gaps(
-            run, residue_lookup, allow_noncanonical=allow_noncanonical
+            run, residue_lookup, allow_noncanonical=allow_noncanonical,
+            metal_bound=metal_bound,
         )
         edge_additions, edge_messages = _infer_run_extensions(
-            run, residue_lookup, allow_noncanonical=allow_noncanonical
+            run, residue_lookup, allow_noncanonical=allow_noncanonical,
+            metal_bound=metal_bound,
         )
 
         messages.extend(run_messages)
@@ -696,7 +721,43 @@ def guess_pairs(
     pdb_filename: str | Path,
     *,
     allow_noncanonical: bool = False,
+    metal_pairs: bool = True,
+    metal_distance: float = DEFAULT_MAX_DISTANCE,
+    metal_elements=None,
 ) -> tuple[list[Candidate], list[str]]:
+    """Guess base pairs; see :func:`guess_pairs_detailed`."""
+    selected, messages, _ = guess_pairs_detailed(
+        pdb_filename,
+        allow_noncanonical=allow_noncanonical,
+        metal_pairs=metal_pairs,
+        metal_distance=metal_distance,
+        metal_elements=metal_elements,
+    )
+    return selected, messages
+
+
+def guess_pairs_detailed(
+    pdb_filename: str | Path,
+    *,
+    allow_noncanonical: bool = False,
+    metal_pairs: bool = True,
+    metal_distance: float = DEFAULT_MAX_DISTANCE,
+    metal_elements=None,
+) -> tuple[list[Candidate], list[str], list[MetalMediatedPair]]:
+    """Guess base pairs and report metal-mediated pairs separately.
+
+    Bases in metal-mediated pairs (``restraints.metal_pairs``) are never
+    offered as candidates, never used to extend a run and never fill a gap,
+    so they cannot be guessed as a canonical pair with anything.
+    """
+    found: list[MetalMediatedPair] = []
+    metal_messages: list[str] = []
+    if metal_pairs:
+        found, metal_messages = find_metal_mediated_pairs(
+            pdb_filename, max_distance=metal_distance, metals=metal_elements
+        )
+    metal_bound = frozenset(metal_bound_residues(found))
+
     parser = PDBParser(QUIET=True)
     structure = parser.get_structure(
         "NARestraints", str(pdb_filename)
@@ -705,9 +766,11 @@ def guess_pairs(
 
     residues = []
 
-    for model in structure:
+    for model in first_model(structure):
         for chain in model:
             for residue in chain.get_residues():
+                if (chain.id, str(residue.id[1])) in metal_bound:
+                    continue
                 try:
                     pair_residue = pair_residue_from_pdb(
                         records, residue
@@ -727,14 +790,23 @@ def guess_pairs(
         if p.resid.isdigit()
     }
 
-    return _select_runs(
-        candidates, residue_lookup, allow_noncanonical=allow_noncanonical
+    selected, messages = _select_runs(
+        candidates, residue_lookup, allow_noncanonical=allow_noncanonical,
+        metal_bound=metal_bound,
     )
+    return selected, metal_messages + messages, found
+
 
 def write_guess(
     filename: str | Path,
     candidates: Iterable[Candidate],
+    metal_pairs: Iterable[MetalMediatedPair] = (),
 ) -> None:
+    """Write guessed pairs; metal-mediated pairs are written as comments.
+
+    The commented blocks are ignored by ``narestraints``, so these pairs are
+    recorded for the reader without being restrained.
+    """
     lines = []
 
     for candidate in candidates:
@@ -751,6 +823,16 @@ def write_guess(
                     "# WARNING: non-canonical H-bond geometry is currently poor; "
                     "this may be expected before refinement"
             )
+        lines.append("")
+
+    for pair in metal_pairs:
+        first, second = pair.residues
+        lines.append(
+            "# Metal-mediated pair: not a canonical pair and not restrained by NARestraints"
+        )
+        lines.append(f"# {first[0].strip()} {first[1]}")
+        lines.append(f"# {second[0].strip()} {second[1]}")
+        lines.append(f"# {pair.describe()}")
         lines.append("")
 
     Path(filename).write_text(
@@ -783,8 +865,18 @@ def main() -> None:
         action="store_true",
         help="Explicitly allow non-canonical pair recipes (AG IX and GU XXVIII)",
     )
+    from .cli import (
+        add_metal_pair_arguments,
+        add_readyset_arguments,
+        metal_elements_from_args,
+        prepared_model_from_args,
+    )
+
+    add_metal_pair_arguments(parser)
+    add_readyset_arguments(parser)
 
     args = parser.parse_args()
+    metal_elements = metal_elements_from_args(parser, args)
 
     pdb_path = Path(args.pdb)
     output = (
@@ -794,12 +886,19 @@ def main() -> None:
         )
     )
 
-    fixed_pdb = validate_and_fix_pdb(args.pdb)
-    candidates, messages = guess_pairs(
-        fixed_pdb, allow_noncanonical=args.non_canonical
+    model = prepared_model_from_args(parser, args)
+    fixed_pdb = validate_and_fix_pdb(model)
+    candidates, messages, metal_pairs = guess_pairs_detailed(
+        fixed_pdb,
+        allow_noncanonical=args.non_canonical,
+        metal_pairs=not args.no_metal_pairs,
+        metal_distance=args.metal_distance,
+        metal_elements=metal_elements,
     )
 
     print(f"BASE PAIRS FOUND: {len(candidates)}")
+    for pair in metal_pairs:
+        print(f"METAL-MEDIATED PAIR (not guessed as canonical): {pair.describe()}")
 
     if args.expected_pairs is not None:
         if len(candidates) != args.expected_pairs:
@@ -836,7 +935,7 @@ def main() -> None:
             )
         )
 
-    write_guess(output, candidates)
+    write_guess(output, candidates, metal_pairs)
     print(f"Wrote {output}")
 
 

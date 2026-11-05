@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+- Multi-model PDB files: `narestraints` stacking and `narestraints-guesser` now
+  read model 1 only (as pair lookup, metal-pair and heavy-atom detection
+  already did) and warn when more models are present. Previously the guesser
+  mixed residues from all models, so it could propose pairs that
+  `narestraints` then could not find ("Could not find C:14 in the PDB").
+- Run phenix.ready_set before `narestraints` and `narestraints-guesser` when the
+  model has HETATM heavy atoms (`restraints/readyset.py`), always with
+  `hydrogens=False`, `ligands=True` and `optimise_ligand_geometry=False`, in a
+  separate `<model>_readyset/` folder, and continue with its updated model.
+  Added hydrogens are refused; ReadySet no-ops fall back to the input model.
+  Options `--readyset auto|always|never`, `--ready-set PATH`, `--readyset-dir`.
+- Detect metal-mediated base pairs from coordinates (`restraints/metal_pairs.py`):
+  a HETATM metal (Z >= 21 by default) within 3.6 A of base N/O/S/Se atoms of
+  two non-neighbouring nucleotides. `narestraints` skips pair restraints and,
+  unless `--keep-metal-pair-stacking`, stacking for those bases;
+  `narestraints-guesser` never guesses them and records them as comments in
+  its output. Options `--metal-distance`, `--metal-elements`,
+  `--no-metal-pairs`. New `guess_pairs_detailed()`; `guess_pairs()` keeps its
+  two-value return.
+- Stop generating stacking between nucleotides and following non-nucleotide
+  residues (ions, waters, ligands) in the same chain.
+- Add an opt-in `--anomalous` / `--anomalous-elements` toggle to `narestraints`
+  that finds heavy atoms in HETATM records (atomic number >= 21 by default,
+  waters excluded) and writes one phenix.refine
+  `refinement.refine.anomalous_scatterers` group per element, with f'/f''
+  starting at 0 and refined, plus the default strategy with `group_anomalous`
+  (suppress with `--no-anomalous-strategy`). New pure-Python module
+  `restraints/anomalous.py` and `tests/test_anomalous.py`. Output without the
+  toggle is unchanged. PHIL checked against Phenix 2.2.1 parameter definitions;
+  no native phenix.refine run recorded yet.
 - Correct swapped 5BU/BRU sugar types and abbreviations, including the sorting
   view; align reviewed DF O2 mapping with atom S1, and trim all 129 literal
   `C5 ` role mappings. Document the exact 138 changed cells, source evidence
