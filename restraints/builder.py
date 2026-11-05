@@ -112,6 +112,20 @@ def _stacking_residue(records: list[dict], residue) -> StackingResidue:
     )
 
 
+def first_model(structure) -> list:
+    """Return ``[model 1]``, warning when the file has more than one model.
+
+    Restraints, guessing, metal-pair and heavy-atom detection all describe the
+    first model only, so every step must read the same one.
+    """
+    models = list(structure)
+    if len(models) > 1:
+        print(
+            f"WARNING: the PDB file has {len(models)} models; only model 1 is used."
+        )
+    return models[:1]
+
+
 def _is_nucleotide_like(residue, stacking: StackingResidue) -> bool:
     """Whether a residue can take part in base stacking.
 
@@ -254,7 +268,7 @@ def build_phil_from_pdb(
         # ligands that share a chain with the nucleic acid are skipped. Bases
         # in metal-mediated pairs are not stacked unless explicitly kept.
         excluded = set() if keep_metal_pair_stacking else set(bound)
-        for model in structure:
+        for model in first_model(structure):
             for chain in model:
                 stacking_residues = []
                 skipped_names = []

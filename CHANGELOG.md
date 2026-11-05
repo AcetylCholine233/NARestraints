@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Multi-model PDB files: `narestraints` stacking and `narestraints-guesser` now
+  read model 1 only (as pair lookup, metal-pair and heavy-atom detection
+  already did) and warn when more models are present. Previously the guesser
+  mixed residues from all models, so it could propose pairs that
+  `narestraints` then could not find ("Could not find C:14 in the PDB").
 - Run phenix.ready_set before `narestraints` and `narestraints-guesser` when the
   model has HETATM heavy atoms (`restraints/readyset.py`), always with
   `hydrogens=False`, `ligands=True` and `optimise_ligand_geometry=False`, in a

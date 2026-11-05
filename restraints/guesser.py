@@ -9,7 +9,7 @@ from typing import Iterable
 import numpy as np
 from Bio.PDB import PDBParser
 
-from .builder import pair_residue_from_pdb
+from .builder import first_model, pair_residue_from_pdb
 from .phenix import (
     AT_ANGLE_RESTRAINTS,
     AT_BONDS,
@@ -766,7 +766,7 @@ def guess_pairs_detailed(
 
     residues = []
 
-    for model in structure:
+    for model in first_model(structure):
         for chain in model:
             for residue in chain.get_residues():
                 if (chain.id, str(residue.id[1])) in metal_bound:
