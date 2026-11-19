@@ -181,7 +181,7 @@ def build_phil_from_pdb(
     metal_pairs: bool = True,
     metal_distance: float = DEFAULT_MAX_DISTANCE,
     metal_elements: Iterable[str] | None = None,
-    keep_metal_pair_stacking: bool = False,
+    keep_metal_pair_stacking: bool = True,
 ) -> list[HeavyAtomSite]:
     """Write the restraint PHIL and return any anomalous scatterers written.
 
@@ -193,8 +193,9 @@ def build_phil_from_pdb(
 
     With ``metal_pairs=True`` (the default), metal-mediated base pairs are
     found from the coordinates (see ``restraints.metal_pairs``). Any pair-file
-    pair involving one of their bases is skipped, and so is stacking of those
-    bases unless ``keep_metal_pair_stacking`` is set.
+    pair involving one of their bases is skipped. Those bases are still
+    stacked on their chain neighbours; ``keep_metal_pair_stacking=False``
+    leaves them unstacked (and stacks nothing across them).
     """
     parser = PDBParser(QUIET=True)
     structure = parser.get_structure("NARestraints", str(pdb_filename))
@@ -266,7 +267,8 @@ def build_phil_from_pdb(
         #
         # Only nucleotide-like residues are stacked: ions, waters and other
         # ligands that share a chain with the nucleic acid are skipped. Bases
-        # in metal-mediated pairs are not stacked unless explicitly kept.
+        # in metal-mediated pairs stay stacked on their neighbours unless
+        # keep_metal_pair_stacking=False.
         excluded = set() if keep_metal_pair_stacking else set(bound)
         for model in first_model(structure):
             for chain in model:
@@ -293,6 +295,17 @@ def build_phil_from_pdb(
                     print(
                         f"Chain {chain.id}: no stacking for metal-mediated base(s) "
                         f"{', '.join(skipped_bound)}."
+                    )
+                kept_bound = [
+                    f"{residue.chain}:{residue.resid}"
+                    for residue in stacking_residues
+                    if _residue_key(residue.chain, residue.resid) in bound
+                    and _residue_key(residue.chain, residue.resid) not in excluded
+                ]
+                if kept_bound:
+                    print(
+                        f"Chain {chain.id}: metal-mediated base(s) {', '.join(kept_bound)} "
+                        "still stacked on their neighbours (no base-pair restraints)."
                     )
 
                 for stretch in _split_at(stacking_residues, excluded):

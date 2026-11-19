@@ -179,9 +179,9 @@ about 2.0-2.4 A. Contacts under 1.8 A are reported as clashes.
 **Restraint generation.** Any pair-file pair that involves a base of a
 metal-mediated pair gets no pair restraints (H-bond distances, angles,
 parallelity or planarity), with a warning if the listed partner differs from
-the detected one. These bases also get no stacking restraints unless
-`--keep-metal-pair-stacking` is given; their neighbours are not stacked across
-the gap.
+the detected one. These bases are still stacked on their neighbours in the
+chain. `--no-metal-pair-stacking` leaves them unstacked, and then their
+neighbours are not stacked across the gap either.
 
 **Guessing.** Bases of metal-mediated pairs are never candidates, never extend
 a run and never fill a gap. Detected pairs are printed and written to the

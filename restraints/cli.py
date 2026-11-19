@@ -123,9 +123,14 @@ def main() -> None:
     add_metal_pair_arguments(parser)
     add_readyset_arguments(parser)
     parser.add_argument(
-        "--keep-metal-pair-stacking", action="store_true",
-        help="keep stacking restraints for bases in metal-mediated pairs "
-             "(their base-pair restraints are still skipped)",
+        "--no-metal-pair-stacking", dest="keep_metal_pair_stacking",
+        action="store_false", default=True,
+        help="do not stack bases of metal-mediated pairs on their neighbours "
+             "(by default they are stacked; their base-pair restraints are always skipped)",
+    )
+    parser.add_argument(   # the default since 2026-11-19; still accepted
+        "--keep-metal-pair-stacking", dest="keep_metal_pair_stacking",
+        action="store_true", default=True, help=argparse.SUPPRESS,
     )
 
     args = parser.parse_args()

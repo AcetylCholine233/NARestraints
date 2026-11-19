@@ -253,7 +253,9 @@ def test_waters_and_ions_are_never_stacked(tmp_path):
     assert all(int(r1) <= 24 and int(r2) <= 24 for _, r1, _, r2 in stacks)
 
 
-def test_builder_skips_all_restraints_on_metal_mediated_bases(tmp_path):
+def test_builder_skips_pair_restraints_but_keeps_stacking_on_metal_mediated_bases(tmp_path):
+    """dfPucker: Ag bridges A:9 DF and D:8 DG. The pair gets no pair
+    restraints; A:9 still stacks on A:8 and A:10 (default since 2026-11-19)."""
     _needs_bio()
     from restraints.base_pairs import read_base_pair_file
     from restraints.builder import build_phil_from_pdb
@@ -263,24 +265,57 @@ def test_builder_skips_all_restraints_on_metal_mediated_bases(tmp_path):
     out = tmp_path / "df.phil"
     build_phil_from_pdb(EXAMPLES / "dfPucker-fixed.pdb", read_base_pair_file(pairs), out)
     text = out.read_text()
+    assert "distance_ideal" not in text  # no base-pair restraints
+    stacks = _stacking_pairs(text)
+    assert ("D", "8", "D", "9") in stacks
+    # Stacks touching DF (A:9, and D:7 before D:8) are explicit parallelity edits.
+    edits = [re.sub(r"\s+", " ", block) for block in re.findall(r"parallelity \{(.*?)\}", text, re.S)]
 
-    assert not re.search(r"chain A and resid 9\b", text)
-    assert not re.search(r"chain D and resid 8\b", text)
-    # No new stack bridges the removed base.
-    assert ("A", "8", "A", "10") not in _stacking_pairs(text)
+    def edit_between(first, second):
+        return any(re.search(rf"atom_selection_1 = chain {first[0]} and resid {first[1]}\b", block)
+                   and re.search(rf"atom_selection_2 = chain {second[0]} and resid {second[1]}\b", block)
+                   for block in edits)
 
-    kept = tmp_path / "df-keep.phil"
+    assert edit_between(("D", "7"), ("D", "8"))
+    assert edit_between(("A", "8"), ("A", "9")) and edit_between(("A", "9"), ("A", "10"))
+    assert ("A", "8", "A", "10") not in stacks
+
+    skipped = tmp_path / "df-skip.phil"
     build_phil_from_pdb(
-        EXAMPLES / "dfPucker-fixed.pdb", read_base_pair_file(pairs), kept,
-        keep_metal_pair_stacking=True,
+        EXAMPLES / "dfPucker-fixed.pdb", read_base_pair_file(pairs), skipped,
+        keep_metal_pair_stacking=False,
     )
-    kept_text = kept.read_text()
-    assert re.search(r"chain A and resid 9\b", kept_text)  # stacking only
-    assert "distance_ideal" not in kept_text  # still no base-pair restraints
+    skipped_text = skipped.read_text()
+    assert not re.search(r"chain A and resid 9\b", skipped_text)
+    assert not re.search(r"chain D and resid 8\b", skipped_text)
+    # No new stack bridges the removed base.
+    assert ("A", "8", "A", "10") not in _stacking_pairs(skipped_text)
 
     old = tmp_path / "df-old.phil"
     build_phil_from_pdb(EXAMPLES / "dfPucker-fixed.pdb", [], old, metal_pairs=False)
     assert re.search(r"chain A and resid 9\b", old.read_text())
+
+
+def test_cli_keeps_metal_pair_stacking_unless_told_not_to(tmp_path, monkeypatch):
+    _needs_bio()
+    from restraints import cli
+
+    pairs = tmp_path / "pairs.txt"
+    pairs.write_text("A 9\nD 8\n")
+    model = tmp_path / "dfPucker-fixed.pdb"   # the validator writes its fixed copy beside it
+    model.write_text((EXAMPLES / "dfPucker-fixed.pdb").read_text())
+    monkeypatch.setattr("builtins.input", lambda prompt="": "y")
+    outputs = {}
+    for name, extra in (("default", []), ("old_flag", ["--keep-metal-pair-stacking"]),
+                        ("off", ["--no-metal-pair-stacking"])):
+        out = tmp_path / f"{name}.phil"
+        monkeypatch.setattr("sys.argv", ["narestraints", str(model), str(pairs), "-o", str(out),
+                                         "--readyset", "never", *extra])
+        cli.main()
+        outputs[name] = _stacking_pairs(out.read_text())
+    assert ("D", "8", "D", "9") in outputs["default"]
+    assert outputs["old_flag"] == outputs["default"]   # accepted; now the default
+    assert ("D", "8", "D", "9") not in outputs["off"]
 
 
 def test_guesser_never_guesses_a_metal_mediated_pair(tmp_path):

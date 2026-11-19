@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Bases of metal-mediated pairs are now stacked on their chain neighbours by
+  default (`build_phil_from_pdb(keep_metal_pair_stacking=True)`); only their
+  base-pair restraints are skipped. `--no-metal-pair-stacking` restores the
+  previous behaviour (no stacking for those bases, none across them);
+  `--keep-metal-pair-stacking` is still accepted and is now the default. The
+  output says which metal-mediated bases are still stacked. Requested
+  2026-11-19 for NASolve's metal-mediated pairs.
 - Multi-model PDB files: `narestraints` stacking and `narestraints-guesser` now
   read model 1 only (as pair lookup, metal-pair and heavy-atom detection
   already did) and warn when more models are present. Previously the guesser
